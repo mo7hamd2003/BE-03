@@ -30,4 +30,5 @@ except Exception as e:
 app = FastAPI()
 app.include_router(auth.router)
 app.include_router(pub.router)
+app.include_router(health.router)
 app.include_router(protected.router)
