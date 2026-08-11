@@ -1,20 +1,14 @@
 import os
 from dotenv.main import load_dotenv
-import jwt
-from jwt import PyJWKClient
-from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from supabase import Client
 from database import get_supabase
+from dependency import get_user
 
 
 load_dotenv()
 router = APIRouter()
-security = HTTPBearer(auto_error=False)
-
-# Supabase signs tokens with ES256; public keys are fetched from JWKS and cached
-JWKS_CLIENT = PyJWKClient(f"{os.getenv('SUPABASE_URL')}/auth/v1/.well-known/jwks.json")
 
 class UserCreate(BaseModel):
     email: str
@@ -38,27 +32,6 @@ class UserCreate(BaseModel):
             raise ValueError("password is required")
         return v.strip()
     
-
-def get_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: Client = Depends(get_supabase),
-):
-    """Extract the JWT from the Authorization header and validate it against Supabase."""
-    if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Access token required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    try:
-        response = db.auth.get_user(credentials.credentials)
-        return response.user
-    except Exception:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication credentials or expired token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 @router.post("/auth/signup")
 def sign_up(user: UserCreate, db: Client = Depends(get_supabase)):
@@ -87,3 +60,12 @@ def login(credentials: UserCreate, db: Client = Depends(get_supabase)):
         }
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+
+@router.post("/auth/logout")
+def logout(user=Depends(get_user), db: Client = Depends(get_supabase)):
+    try:
+        db.auth.sign_out()
+        return {"status_code": 204, "message": "Logged out successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
