@@ -1,6 +1,8 @@
-from sqlalchemy import create_engine 
+from fastapi import FastAPI
+from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import os
+from routers import auth, health
 
 # Stage-0: Load .env variables
 load_dotenv()
@@ -24,4 +26,7 @@ try:
         print("Server running and connected to Supabase")
 except Exception as e:
     print(f"Failed to connect: {e}")
+
+app = FastAPI()
+app.include_router(auth.router)
 
