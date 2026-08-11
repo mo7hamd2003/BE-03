@@ -1,6 +1,7 @@
 import os
 from dotenv.main import load_dotenv
 import jwt
+from jwt import PyJWKClient
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, field_validator
 from supabase import Client
@@ -9,7 +10,8 @@ from database import get_supabase
 
 load_dotenv()
 
-key=os.getenv("SUPABASE_JWT_SECRET")
+# Supabase signs tokens with ES256; public keys are fetched from JWKS and cached
+JWKS_CLIENT = PyJWKClient(f"{os.getenv('SUPABASE_URL')}/auth/v1/.well-known/jwks.json")
 
 router = APIRouter()
 
@@ -37,16 +39,24 @@ class UserCreate(BaseModel):
     
 
 
-def get_current_user(authorization: str = Header(...)):
+def get_current_user(authorization: str | None = Header(default=None)):
+    if authorization is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise ValueError("invalid scheme")
+        signing_key = JWKS_CLIENT.get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
-            key,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256"],
             audience="authenticated",
+            leeway=30,
         )
     except (jwt.PyJWTError, ValueError):
         raise HTTPException(
@@ -57,7 +67,7 @@ def get_current_user(authorization: str = Header(...)):
     return payload
 
 
-@router.post("/signup")
+@router.post("/auth/signup")
 def sign_up(user: UserCreate, db: Client = Depends(get_supabase)):
     try:
         response = db.auth.sign_up({
@@ -69,7 +79,7 @@ def sign_up(user: UserCreate, db: Client = Depends(get_supabase)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/login")
+@router.post("/auth/login")
 def login(credentials: UserCreate, db: Client = Depends(get_supabase)):
     try:
         response = db.auth.sign_in_with_password({

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import os
-from routers import auth, health
+from routers import auth, health, protected, pub
 
 # Stage-0: Load .env variables
 load_dotenv()
@@ -29,4 +29,5 @@ except Exception as e:
 
 app = FastAPI()
 app.include_router(auth.router)
-
+app.include_router(pub.router)
+app.include_router(protected.router)
